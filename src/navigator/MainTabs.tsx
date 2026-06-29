@@ -1,7 +1,7 @@
 // src/navigation/MainTabs.tsx
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { PlansScreen } from '../screens/plans/PlansScreen';
+import { PlansScreen } from '../screens/PlansScreen';
 
 export type MainTabsParamList = {
   Plans: undefined;

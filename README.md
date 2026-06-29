@@ -1,97 +1,131 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Haven — Auth Flow (Boilerplate)
 
-# Getting Started
+This is the **Pass 1 skeleton**: Login → Sign Up → OTP → Plans, with **stubbed
+authentication**. There's no backend yet — auth is faked so you can build and
+test the navigation flow end to end.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+## Running the app
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
+```bash
+# Start Metro (keep this terminal open)
 npm start
 
-# OR using Yarn
-yarn start
+# In a second terminal — build & launch on a connected device/emulator
+npm run android      # or: npm run ios
 ```
 
-## Step 2: Build and run your app
+If you just installed a native module, do a clean rebuild instead:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
+```bash
+cd android && ./gradlew clean && cd ..
+npm start -- --reset-cache
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
+---
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## How to log in (stubbed credentials)
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+Auth is currently **faked** — the screens don't hit a real server. Here's exactly
+what to do on each screen to get through the flow.
 
-```sh
-bundle install
+### Path A — Log In (fastest)
+
+The Login screen accepts **anything**. It doesn't check credentials yet.
+
+1. Open the app → you land on the **Login** screen
+2. Type **any** username (e.g. `test`)
+3. Type **any** password (e.g. `test`)
+4. Tap **Log In**
+5. ✅ You're taken straight to the **Plans** screen
+
+> Why: `handleLogin` calls `signIn('fake-token-123')` without checking the
+> inputs. Any input logs you in.
+
+### Path B — Sign Up → OTP
+
+This path goes through phone verification.
+
+1. On the Login screen, tap **"No account? Sign up"**
+2. Fill in **Name, Username, Phone, Password** (any values — not validated yet)
+3. Tap **Sign Up** → you're taken to the **OTP** screen
+4. Enter the code: **`1 2 3 4 5 6`**  ← this is the only accepted code
+5. Tap **Verify**
+6. ✅ Verified → you land on the **Plans** screen
+
+> Any code **other than `123456`** shows "Incorrect code" and clears the boxes.
+
+### Logging out
+
+On the **Plans** screen, tap **Log out**. This clears the token and returns you
+to the Login screen.
+
+---
+
+## What's actually happening (the auth mechanism)
+
+The whole flow hinges on one piece of state: a **token** held in `AuthContext`.
+
+```
+No token   →  AuthStack  (Login / SignUp / OTP)
+Has token  →  MainTabs   (Plans)
 ```
 
-Then, and every time you update your native dependencies, run:
+- `signIn(token)` saves a token → the app swaps to the Plans screen automatically
+- `signOut()` clears the token → the app swaps back to Login automatically
+- The token is persisted with **AsyncStorage**, so you stay logged in across
+  app restarts (close & reopen — you'll still be on Plans)
 
-```sh
-bundle exec pod install
+You never manually navigate between the auth screens and the main app. Setting
+or clearing the token does it, because `RootNavigator` re-renders when the token
+changes.
+
+### The stub lines (where to plug in a real backend later)
+
+| File | Stub | Replace with |
+|------|------|--------------|
+| `LoginScreen.tsx` | `signIn('fake-token-123')` | real `POST /auth/login` → use returned token |
+| `SignUpScreen.tsx` | `navigation.navigate('OTP', ...)` | real `POST /auth/signup` → trigger OTP send |
+| `OTPScreen.tsx` | `if (code === '123456')` | real `POST /auth/verify-otp` → use returned token |
+
+When you swap these for real API calls, **nothing else changes** — the navigation
+reacts to the token exactly the same way.
+
+---
+
+## Quick reference
+
+| Screen | Input to proceed |
+|--------|------------------|
+| **Login** | any username + any password |
+| **Sign Up** | any values in all 4 fields |
+| **OTP** | `123456` |
+| **Plans** | "Log out" returns to Login |
+
+---
+
+## Project structure
+
+```
+src/
+├── context/
+│   └── AuthContext.tsx       # token state + signIn/signOut (the spine)
+├── navigator/
+│   ├── RootNavigator.tsx     # picks AuthStack vs MainTabs based on token
+│   ├── AuthStack.tsx         # Login → SignUp → OTP
+│   └── MainTabs.tsx          # bottom tabs (Plans for now)
+├── screens/
+│   ├── auth/
+│   │   ├── LoginScreen.tsx
+│   │   ├── SignUpScreen.tsx
+│   │   └── OTPScreen.tsx
+│   └── PlansScreen.tsx
+└── components/
+    ├── Button.tsx
+    └── Input.tsx
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+> Note: navigation folder is `navigator/` in this project — keep imports
+> consistent with that name. [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/AuthStack';
+import { AuthStackParamList } from '../../navigator/AuthStack';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 
@@ -19,7 +19,7 @@ export function SignUpScreen({ navigation }: Props) {
   const handleSignUp = async () => {
     setLoading(true);
     // STUBBED: pretend we created the user and triggered an OTP send
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise<void>(r => setTimeout(r, 600));
     setLoading(false);
     navigation.navigate('OTP', { phone });   // verification comes next
   };

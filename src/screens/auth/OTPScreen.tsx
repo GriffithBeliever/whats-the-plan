@@ -3,7 +3,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/AuthStack';
+import { AuthStackParamList } from '../../navigator/AuthStack';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/Button';
 
@@ -28,7 +28,7 @@ export function OTPScreen({ route }: Props) {
     const code = digits.join('');
     if (code.length < LEN) { setError('Enter all 6 digits'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise<void>(r => setTimeout(r, 600));
     setLoading(false);
     // STUBBED: 123456 is "correct"
     if (code === '123456') {
