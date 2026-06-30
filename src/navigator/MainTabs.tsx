@@ -49,7 +49,7 @@ export function MainTabs() {
         component={ProfileScreen} 
         options={{
           tabBarIcon: ({color, size}) => (
-            <MaterialIcons name="profile"  color={color} size={size} />
+            <MaterialIcons name="person-outline"  color={color} size={size} />
           ),
         }}
       />
