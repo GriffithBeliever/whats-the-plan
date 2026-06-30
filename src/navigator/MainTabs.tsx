@@ -3,7 +3,7 @@ import React from 'react';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PlansScreen } from '../screens/PlansScreen';
-import { GroupsScreen } from '../screens/GroupsScreen';
+import { GroupsStack } from './GroupsStack';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { MapScreen } from '../screens/MapScreen';
 
@@ -19,7 +19,7 @@ const Tab = createBottomTabNavigator<MainTabsParamList>();
 export function MainTabs() {
   return (
     <Tab.Navigator initialRouteName="Plans" screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Groups" component={GroupsScreen}
+      <Tab.Screen name="Groups" component={GroupsStack}
       options={{
           tabBarIcon: ({color, size}) => (
             <MaterialIcons name="groups"  color={color} size={size} />
