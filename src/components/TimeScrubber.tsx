@@ -4,100 +4,79 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, PanResponder,
   NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
-import { MapEvent, CATEGORY_STYLE, formatHour, formatDayLabel } from '../types/map';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MapEvent, CATEGORY_STYLE, formatDayLabel } from '../types/map';
 import { ExpandedCalendar } from './ExpandedCalendar';
 
-const ITEM_WIDTH = 46;
-const HOURS_SPAN = 60;
-const SNAP_RADIUS_HOURS = 2;
+const ITEM_WIDTH = 64;
 const EXPANDED_HEIGHT = 320;
 
-export type HourSlot = {
+export type DaySlot = {
   date: Date;
-  isDayStart: boolean;
   events: MapEvent[];
 };
 
-export function buildHourSlots(events: MapEvent[]): HourSlot[] {
-  const base = new Date();
-  base.setMinutes(0, 0, 0);
+// spans from just before today to just past the latest event, always including today
+export function buildDaySlots(events: MapEvent[]): DaySlot[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const byHourKey = new Map<string, MapEvent[]>();
-  events.forEach(e => {
-    const key = e.date.toISOString().slice(0, 13);
-    if (!byHourKey.has(key)) byHourKey.set(key, []);
-    byHourKey.get(key)!.push(e);
+  const eventDays = events.map(e => {
+    const d = new Date(e.date.getFullYear(), e.date.getMonth(), e.date.getDate());
+    return d.getTime();
   });
 
-  const slots: HourSlot[] = [];
-  for (let i = 0; i < HOURS_SPAN; i++) {
-    const d = new Date(base);
-    d.setHours(base.getHours() + i);
-    const key = d.toISOString().slice(0, 13);
-    slots.push({
-      date: d,
-      isDayStart: i === 0 || d.getHours() === 0,
-      events: byHourKey.get(key) ?? [],
-    });
+  const minTime = Math.min(today.getTime(), ...eventDays);
+  const maxTime = Math.max(today.getTime(), ...eventDays);
+
+  const start = new Date(minTime);
+  start.setDate(start.getDate() - 2);
+  const end = new Date(maxTime);
+  end.setDate(end.getDate() + 2);
+
+  const totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+
+  const byDay = new Map<string, MapEvent[]>();
+  events.forEach(e => {
+    const key = new Date(e.date.getFullYear(), e.date.getMonth(), e.date.getDate()).toDateString();
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(e);
+  });
+
+  const slots: DaySlot[] = [];
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    slots.push({ date: d, events: byDay.get(d.toDateString()) ?? [] });
   }
   return slots;
 }
 
-function occupiedIndices(slots: HourSlot[]): number[] {
+export function findTodayIndex(slots: DaySlot[]): number {
+  const today = new Date().toDateString();
+  const idx = slots.findIndex(s => s.date.toDateString() === today);
+  return idx >= 0 ? idx : 0;
+}
+
+function occupiedIndices(slots: DaySlot[]): number[] {
   return slots.reduce<number[]>((acc, slot, i) => {
     if (slot.events.length > 0) acc.push(i);
     return acc;
   }, []);
 }
 
-function nearestOccupied(occupied: number[], target: number): number {
-  return occupied.reduce((closest, i) =>
-    Math.abs(i - target) < Math.abs(closest - target) ? i : closest,
-  occupied[0]);
+function closestPrevOccupied(occupied: number[], current: number): number {
+  const behind = occupied.filter(i => i < current);
+  return behind.length > 0 ? behind[behind.length - 1] : occupied[0];
 }
 
-function buildDayCells(slots: HourSlot[]) {
-  const byDay = new Map<string, { date: Date; indices: number[] }>();
-  slots.forEach((slot, i) => {
-    const key = slot.date.toDateString();
-    if (!byDay.has(key)) byDay.set(key, { date: slot.date, indices: [] });
-    byDay.get(key)!.indices.push(i);
-  });
-  return Array.from(byDay.values()).map(({ date, indices }) => {
-    const categories = new Set<string>();
-    let busiestIndex = indices[0];
-    let busiestCount = -1;
-    indices.forEach(i => {
-      slots[i].events.forEach(e => {
-        categories.add(e.category);
-        if (e.goingCount > busiestCount) {
-          busiestCount = e.goingCount;
-          busiestIndex = i;
-        }
-      });
-    });
-    return { date, categories: Array.from(categories), busiestIndex };
-  });
-}
-
-// find the busiest hour on a given calendar date, if any
-function busiestIndexForDate(slots: HourSlot[], date: Date): number | null {
-  let best: number | null = null;
-  let bestCount = -1;
-  slots.forEach((slot, i) => {
-    if (slot.date.toDateString() !== date.toDateString()) return;
-    slot.events.forEach(e => {
-      if (e.goingCount > bestCount) {
-        bestCount = e.goingCount;
-        best = i;
-      }
-    });
-  });
-  return best;
+function closestNextOccupied(occupied: number[], current: number): number {
+  const ahead = occupied.filter(i => i > current);
+  return ahead.length > 0 ? ahead[0] : occupied[occupied.length - 1];
 }
 
 type Props = {
-  slots: HourSlot[];
+  slots: DaySlot[];
   selectedIndex: number;
   onChange: (index: number) => void;
 };
@@ -105,7 +84,6 @@ type Props = {
 export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const occupied = useRef(occupiedIndices(slots)).current;
-  const dayCells = useRef(buildDayCells(slots)).current;
   const [trackWidth, setTrackWidth] = useState(0);
   const expandProgress = useRef(new Animated.Value(0)).current;
   const progressValueRef = useRef(0);
@@ -136,21 +114,13 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
     onChange(index);
   };
 
+  // always latches to whichever day lands nearest center — plain paging
   const handleMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x;
     const rawIndex = Math.max(0, Math.min(slots.length - 1, Math.round(x / ITEM_WIDTH)));
-    const nearest = nearestOccupied(occupied, rawIndex);
-    const withinSnapRadius = Math.abs(nearest - rawIndex) <= SNAP_RADIUS_HOURS;
-
-    if (withinSnapRadius && nearest !== rawIndex) {
-      scrollRef.current?.scrollTo({ x: nearest * ITEM_WIDTH, animated: true });
-      onChange(nearest);
-    } else {
-      onChange(rawIndex);
-    }
+    onChange(rawIndex);
   };
 
-  // smoother spring, clamped so it never overshoots past 0/1 (which would show negative height)
   const animateTo = (target: number, onDone?: () => void) => {
     Animated.spring(expandProgress, {
       toValue: target,
@@ -187,8 +157,8 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
   ).current;
 
   const handleSelectDayFromCalendar = (date: Date) => {
-    const idx = busiestIndexForDate(slots, date);
-    if (idx != null) goTo(idx);
+    const idx = slots.findIndex(s2 => s2.date.toDateString() === date.toDateString());
+    if (idx >= 0) goTo(idx);
     collapse();
   };
 
@@ -220,122 +190,96 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
       </View>
 
       <View style={s.collapsedWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.dayStrip}>
-          {dayCells.map((cell, i) => {
-            const isToday = cell.date.toDateString() === today.toDateString();
-            return (
-              <TouchableOpacity
-                key={i}
-                style={s.dayCellWrap}
-                activeOpacity={0.7}
-                onPress={() => goTo(cell.busiestIndex)}
-              >
-                <Text style={s.dayCellLabel}>
-                  {cell.date.toLocaleDateString([], { weekday: 'short' })}
-                </Text>
-                <View style={[s.dayCell, isToday && s.dayCellToday]}>
-                  <Text style={[s.dayCellNum, isToday && s.dayCellNumToday]}>
-                    {cell.date.getDate()}
-                  </Text>
-                </View>
-                <View style={s.dayCellDots}>
-                  {cell.categories.slice(0, 3).map((c, ci) => (
-                    <View
-                      key={ci}
-                      style={[
-                        s.dayDot,
-                        { backgroundColor: CATEGORY_STYLE[c as keyof typeof CATEGORY_STYLE].iconColor },
-                      ]}
-                    />
-                  ))}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <View style={s.stripRow}>
+          <TouchableOpacity
+            style={s.jumpBtn}
+            onPress={() => goTo(closestPrevOccupied(occupied, selectedIndex))}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="chevron-left" size={22} color="#64748B" />
+          </TouchableOpacity>
 
-        <View
-          style={s.scrubberTrack}
-          onLayout={e => setTrackWidth(e.nativeEvent.layout.width)}
-        >
-          {trackWidth > 0 && (
-            <>
-              <ScrollView
-                ref={scrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                decelerationRate="fast"
-                contentContainerStyle={{ paddingHorizontal: sidePadding }}
-                onMomentumScrollEnd={handleMomentumEnd}
-                scrollEventThrottle={16}
-              >
-                {slots.map((slot, i) => {
-                  const isMajor = slot.date.getHours() % 3 === 0;
-                  const isSelected = i === selectedIndex;
-                  const hasEvent = slot.events.length > 0;
-                  const busiest = hasEvent
-                    ? slot.events.reduce((a, b) => (a.goingCount > b.goingCount ? a : b))
-                    : null;
-                  const eventColor = busiest ? CATEGORY_STYLE[busiest.category].iconColor : null;
+          <View
+            style={s.scrubberTrack}
+            onLayout={e => setTrackWidth(e.nativeEvent.layout.width)}
+          >
+            {trackWidth > 0 && (
+              <>
+                <ScrollView
+                  ref={scrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToInterval={ITEM_WIDTH}
+                  decelerationRate="fast"
+                  contentContainerStyle={{ paddingHorizontal: sidePadding }}
+                  onMomentumScrollEnd={handleMomentumEnd}
+                  scrollEventThrottle={16}
+                >
+                  {slots.map((slot, i) => {
+                    const isSelected = i === selectedIndex;
+                    const isToday = slot.date.toDateString() === today.toDateString();
+                    const categories = Array.from(new Set(slot.events.map(e => e.category)));
 
-                  return (
-                    <View key={i} style={s.slot}>
-                      {slot.isDayStart && (
-                        <Text style={s.slotDayMark} numberOfLines={1}>
-                          {formatDayLabel(slot.date)}
+                    return (
+                      <View key={i} style={s.dayCellWrap}>
+                        <Text style={[s.dayWeekday, isSelected && s.dayWeekdayActive]}>
+                          {slot.date.toLocaleDateString([], { weekday: 'short' })}
                         </Text>
-                      )}
-                      {hasEvent ? (
                         <View
                           style={[
-                            s.eventDot,
-                            { backgroundColor: eventColor! },
-                            isSelected && s.eventDotActive,
+                            s.dayNumWrap,
+                            isToday && s.dayNumToday,
+                            isSelected && !isToday && s.dayNumSelected,
                           ]}
                         >
-                          {slot.events.length > 1 && (
-                            <Text style={s.eventDotCount}>{slot.events.length}</Text>
-                          )}
+                          <Text
+                            style={[
+                              s.dayNum,
+                              isToday && s.dayNumTextToday,
+                              isSelected && !isToday && s.dayNumTextSelected,
+                            ]}
+                          >
+                            {slot.date.getDate()}
+                          </Text>
                         </View>
-                      ) : (
-                        <View
-                          style={[
-                            s.slotTick,
-                            isMajor && s.slotTickMajor,
-                            isSelected && s.slotTickActive,
-                          ]}
-                        />
-                      )}
-                      {(isMajor || hasEvent) && (
-                        <Text style={[s.slotLabel, isSelected && s.slotLabelActive]}>
-                          {formatHour(slot.date)}
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
-              </ScrollView>
-              <View
-                pointerEvents="none"
-                style={[s.scrubberIndicator, { left: trackWidth / 2 - 1 }]}
-              />
-            </>
-          )}
+                        <View style={s.dayDots}>
+                          {categories.slice(0, 3).map((c, ci) => (
+                            <View
+                              key={ci}
+                              style={[s.dayDot, { backgroundColor: CATEGORY_STYLE[c].iconColor }]}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+                <View
+                  pointerEvents="none"
+                  style={[s.scrubberIndicator, { left: trackWidth / 2 - 1 }]}
+                />
+              </>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={s.jumpBtn}
+            onPress={() => goTo(closestNextOccupied(occupied, selectedIndex))}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="chevron-right" size={22} color="#64748B" />
+          </TouchableOpacity>
         </View>
 
-        <View style={s.scrubberLabelRow}>
-          <View>
-            <Text style={s.scrubberDay}>{formatDayLabel(selected.date)}</Text>
-            <Text style={s.scrubberHour}>
-              {formatHour(selected.date)}
-              {selected.events.length > 1 ? ` · ${selected.events.length} plans` : ''}
-            </Text>
-          </View>
-          {selectedIndex !== occupied[0] && (
-            <TouchableOpacity onPress={() => goTo(occupied[0])} style={s.nowPill} activeOpacity={0.8}>
-              <Text style={s.nowPillText}>Earliest</Text>
-            </TouchableOpacity>
-          )}
+        {/* centered label — always refers to the currently selected day */}
+        <View style={s.centerLabel}>
+          <Text style={s.centerLabelDay}>{formatDayLabel(selected.date)}</Text>
+          <Text style={s.centerLabelSub}>
+            {selected.date.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+            {selected.events.length > 0
+              ? ` · ${selected.events.length} plan${selected.events.length > 1 ? 's' : ''}`
+              : ' · nothing planned'}
+          </Text>
         </View>
       </View>
     </View>
@@ -351,63 +295,39 @@ const s = StyleSheet.create({
 
   collapsedWrap: { backgroundColor: '#fff' },
 
-  dayStrip: { backgroundColor: '#fff', paddingHorizontal: 12, paddingTop: 4 },
-  dayCellWrap: { alignItems: 'center', width: 46, marginHorizontal: 3 },
-  dayCellLabel: { fontSize: 10, color: '#94A3B8', marginBottom: 3 },
-  dayCell: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: '#F1F5F9',
+  stripRow: { flexDirection: 'row', alignItems: 'center' },
+  jumpBtn: { width: 30, height: 70, alignItems: 'center', justifyContent: 'center' },
+
+  scrubberTrack: { flex: 1, height: 70, justifyContent: 'center' },
+  dayCellWrap: { width: ITEM_WIDTH, alignItems: 'center' },
+  dayWeekday: { fontSize: 11, color: '#94A3B8', marginBottom: 4 },
+  dayWeekdayActive: { color: '#111', fontWeight: '600' },
+  dayNumWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayCellToday: { backgroundColor: '#111' },
-  dayCellNum: { fontSize: 13, color: '#111' },
-  dayCellNumToday: { color: '#fff', fontWeight: '700' },
-  dayCellDots: { flexDirection: 'row', gap: 2, marginTop: 3, height: 5 },
-  dayDot: { width: 4, height: 4, borderRadius: 2 },
+  dayNumToday: { backgroundColor: '#111' },
+  dayNumSelected: { backgroundColor: '#FEF2F2', borderWidth: 1.5, borderColor: '#B91C1C' },
+  dayNum: { fontSize: 16, color: '#111' },
+  dayNumTextToday: { color: '#fff', fontWeight: '700' },
+  dayNumTextSelected: { color: '#B91C1C', fontWeight: '700' },
+  dayDots: { flexDirection: 'row', gap: 3, marginTop: 5, height: 5 },
+  dayDot: { width: 5, height: 5, borderRadius: 3 },
 
-  scrubberTrack: { height: 56, justifyContent: 'center', backgroundColor: '#fff' },
-  slot: { width: ITEM_WIDTH, alignItems: 'center' },
-  slotDayMark: {
-    position: 'absolute',
-    top: -18,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#B91C1C',
-    width: 70,
-    textAlign: 'center',
-  },
-  slotTick: { width: 2, height: 12, borderRadius: 1, backgroundColor: 'rgba(100,116,139,0.35)' },
-  slotTickMajor: { height: 18, backgroundColor: 'rgba(71,85,105,0.6)' },
-  slotTickActive: { height: 22, backgroundColor: '#B91C1C', width: 3 },
-
-  eventDot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  eventDotActive: { width: 22, height: 22, borderRadius: 11 },
-  eventDotCount: { fontSize: 8, fontWeight: '700', color: '#fff' },
-
-  slotLabel: { fontSize: 10, color: '#94A3B8', marginTop: 4 },
-  slotLabelActive: { color: '#111', fontWeight: '700' },
   scrubberIndicator: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: 'rgba(185,28,28,0.25)',
+    backgroundColor: 'rgba(185,28,28,0.2)',
   },
-  scrubberLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-  },
-  scrubberDay: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  scrubberHour: { fontSize: 22, fontWeight: '800', color: '#111', marginTop: -2 },
-  nowPill: { backgroundColor: '#111', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
-  nowPillText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  centerLabel: { alignItems: 'center', paddingVertical: 12, backgroundColor: '#fff' },
+  centerLabelDay: { fontSize: 20, fontWeight: '800', color: '#111' },
+  centerLabelSub: { fontSize: 13, color: '#64748B', marginTop: 2 },
 
   scrubberEmpty: { backgroundColor: '#fff', paddingVertical: 20, alignItems: 'center' },
   scrubberEmptyText: { fontSize: 13, color: '#94A3B8' },

@@ -23,13 +23,19 @@ export function EventBubble({ event, onPress, dimmed, proximity }: Props) {
 
   const animatedSize = useRef(new Animated.Value(targetSize)).current;
 
-  useEffect(() => {
-    Animated.timing(animatedSize, {
-      toValue: targetSize,
-      duration: 220,
-      useNativeDriver: false, // width/height can't use the native driver
-    }).start();
-  }, [targetSize]);
+// src/components/EventBubble.tsx
+useEffect(() => {
+  const animation = Animated.timing(animatedSize, {
+    toValue: targetSize,
+    duration: 220,
+    useNativeDriver: false,
+  });
+  animation.start();
+
+  return () => {
+    animation.stop();   // ← cancels the in-flight animation if the bubble unmounts first
+  };
+}, [targetSize]);
 
   const cat = CATEGORY_STYLE[event.category];
   const friends = event.circleFriends;

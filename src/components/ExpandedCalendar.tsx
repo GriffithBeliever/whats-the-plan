@@ -5,7 +5,7 @@ import {
   Dimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import { MapEvent, CATEGORY_STYLE } from '../types/map';
-import { HourSlot } from './TimeScrubber';
+import { DaySlot } from './TimeScrubber';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MONTHS_RANGE = 3;
@@ -18,7 +18,7 @@ function monthDiff(a: Date, b: Date) {
   return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
 }
 
-function buildMonthGrid(monthDate: Date, slots: HourSlot[]) {
+function buildMonthGrid(monthDate: Date, slots: DaySlot[]) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const firstDay = new Date(year, month, 1);
@@ -29,9 +29,7 @@ function buildMonthGrid(monthDate: Date, slots: HourSlot[]) {
   slots.forEach(slot => {
     if (slot.date.getFullYear() === year && slot.date.getMonth() === month) {
       const dom = slot.date.getDate();
-      if (slot.events.length > 0) {
-        eventsByDate.set(dom, [...(eventsByDate.get(dom) ?? []), ...slot.events]);
-      }
+      if (slot.events.length > 0) eventsByDate.set(dom, slot.events);
     }
   });
 
@@ -49,9 +47,9 @@ function useStableArray<T>(init: () => T[]): T[] {
 }
 
 type Props = {
-  slots: HourSlot[];
-  selectedDate: Date;                  // currently active date on the scrubber — sync anchor
-  onSelectDay: (date: Date) => void;    // tapping a day navigates + closes
+  slots: DaySlot[];
+  selectedDate: Date;
+  onSelectDay: (date: Date) => void;
 };
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -66,7 +64,6 @@ export function ExpandedCalendar({ slots, selectedDate, onSelectDay }: Props) {
     return arr;
   });
 
-  // open on the month the scrubber is currently viewing, not always "today"
   const initialIndex = Math.max(
     0,
     Math.min(months.length - 1, MONTHS_RANGE + monthDiff(selectedDate, today)),
@@ -75,13 +72,11 @@ export function ExpandedCalendar({ slots, selectedDate, onSelectDay }: Props) {
   const [monthIndex, setMonthIndex] = useState(initialIndex);
 
   useEffect(() => {
-    // snap to the right page on mount without an animated jump
     scrollRef.current?.scrollTo({ x: initialIndex * SCREEN_WIDTH, animated: false });
   }, []);
 
   const handlePageEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    setMonthIndex(i);
+    setMonthIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH));
   };
 
   const activeMonth = months[monthIndex];
@@ -104,9 +99,7 @@ export function ExpandedCalendar({ slots, selectedDate, onSelectDay }: Props) {
           return (
             <View key={monthKey(m)} style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}>
               <View style={s.weekdayRow}>
-                {WEEKDAYS.map((w, i) => (
-                  <Text key={i} style={s.weekdayText}>{w}</Text>
-                ))}
+                {WEEKDAYS.map((w, i) => <Text key={i} style={s.weekdayText}>{w}</Text>)}
               </View>
               <View style={s.grid}>
                 {cells.map((cell, i) => {
@@ -141,25 +134,13 @@ export function ExpandedCalendar({ slots, selectedDate, onSelectDay }: Props) {
                             !hasEvents && s.cellDisabled,
                           ]}
                         >
-                          <Text
-                            style={[
-                              s.cellDay,
-                              isToday && s.cellDayToday,
-                              !hasEvents && s.cellDayDisabled,
-                            ]}
-                          >
+                          <Text style={[s.cellDay, isToday && s.cellDayToday, !hasEvents && s.cellDayDisabled]}>
                             {cell.day}
                           </Text>
                           {hasEvents && (
                             <View style={s.cellDots}>
                               {cell.events.slice(0, 3).map((e, di) => (
-                                <View
-                                  key={di}
-                                  style={[
-                                    s.cellDot,
-                                    { backgroundColor: CATEGORY_STYLE[e.category].iconColor },
-                                  ]}
-                                />
+                                <View key={di} style={[s.cellDot, { backgroundColor: CATEGORY_STYLE[e.category].iconColor }]} />
                               ))}
                             </View>
                           )}
