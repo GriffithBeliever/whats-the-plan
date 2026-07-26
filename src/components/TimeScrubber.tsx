@@ -88,7 +88,10 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
   const expandProgress = useRef(new Animated.Value(0)).current;
   const progressValueRef = useRef(0);
   const [expanded, setExpanded] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  // mounted lazily on first touch, then kept alive (hidden by the height-0
+  // clip when collapsed) so re-opening never pays the mount+grid-build cost again
+  const [everOpened, setEverOpened] = useState(false);
+  const liveIndexRef = useRef(selectedIndex);
 
   useEffect(() => {
     const id = expandProgress.addListener(({ value }) => {
@@ -96,6 +99,10 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
     });
     return () => expandProgress.removeListener(id);
   }, []);
+
+  useEffect(() => {
+    liveIndexRef.current = selectedIndex;
+  }, [selectedIndex]);
 
   if (occupied.length === 0) {
     return (
@@ -110,15 +117,32 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
   const today = new Date();
 
   const goTo = (index: number) => {
+    liveIndexRef.current = index;
     scrollRef.current?.scrollTo({ x: index * ITEM_WIDTH, animated: true });
     onChange(index);
   };
 
-  // always latches to whichever day lands nearest center — plain paging
+  const indexFromOffset = (x: number) =>
+    Math.max(0, Math.min(slots.length - 1, Math.round(x / ITEM_WIDTH)));
+
+  // fires continuously as the strip is dragged so the day's events preview
+  // live under the finger, not just once the scroll settles
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = indexFromOffset(e.nativeEvent.contentOffset.x);
+    if (idx !== liveIndexRef.current) {
+      liveIndexRef.current = idx;
+      onChange(idx);
+    }
+  };
+
+  // safety net: always latches to whichever day lands nearest center once
+  // momentum settles, in case the throttled onScroll missed the final frame
   const handleMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const x = e.nativeEvent.contentOffset.x;
-    const rawIndex = Math.max(0, Math.min(slots.length - 1, Math.round(x / ITEM_WIDTH)));
-    onChange(rawIndex);
+    const idx = indexFromOffset(e.nativeEvent.contentOffset.x);
+    if (idx !== liveIndexRef.current) {
+      liveIndexRef.current = idx;
+      onChange(idx);
+    }
   };
 
   const animateTo = (target: number, onDone?: () => void) => {
@@ -132,7 +156,7 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
   };
 
   const collapse = () => animateTo(0, () => setExpanded(false));
-  const expand = () => { setExpanded(true); animateTo(1); };
+  const expand = () => { setExpanded(true); setEverOpened(true); animateTo(1); };
   const toggleExpanded = () => (expanded ? collapse() : expand());
 
   const panResponder = useRef(
@@ -140,7 +164,7 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
       onPanResponderGrant: () => {
         expandProgress.stopAnimation();
-        setDragging(true);
+        setEverOpened(true);
       },
       onPanResponderMove: (_, g) => {
         const startValue = progressValueRef.current;
@@ -148,7 +172,6 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
         expandProgress.setValue(progress);
       },
       onPanResponderRelease: (_, g) => {
-        setDragging(false);
         const shouldExpand = progressValueRef.current > 0.35 || g.vy < -0.5;
         if (shouldExpand) expand();
         else collapse();
@@ -171,7 +194,7 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
   return (
     <View style={s.root}>
       <Animated.View style={[s.expandedWrap, { height: animatedHeight }]}>
-        {(expanded || dragging) && (
+        {everOpened && (
           <ExpandedCalendar
             slots={slots}
             selectedDate={selected.date}
@@ -212,6 +235,7 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
                   snapToInterval={ITEM_WIDTH}
                   decelerationRate="fast"
                   contentContainerStyle={{ paddingHorizontal: sidePadding }}
+                  onScroll={handleScroll}
                   onMomentumScrollEnd={handleMomentumEnd}
                   scrollEventThrottle={16}
                 >
@@ -221,7 +245,12 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
                     const categories = Array.from(new Set(slot.events.map(e => e.category)));
 
                     return (
-                      <View key={i} style={s.dayCellWrap}>
+                      <TouchableOpacity
+                        key={i}
+                        style={s.dayCellWrap}
+                        activeOpacity={0.7}
+                        onPress={() => goTo(i)}
+                      >
                         <Text style={[s.dayWeekday, isSelected && s.dayWeekdayActive]}>
                           {slot.date.toLocaleDateString([], { weekday: 'short' })}
                         </Text>
@@ -250,7 +279,7 @@ export function TimeScrubber({ slots, selectedIndex, onChange }: Props) {
                             />
                           ))}
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </ScrollView>

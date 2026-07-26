@@ -1,5 +1,5 @@
 // src/components/ExpandedCalendar.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, NativeSyntheticEvent, NativeScrollEvent,
@@ -79,8 +79,11 @@ export function ExpandedCalendar({ slots, selectedDate, onSelectDay }: Props) {
     setMonthIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH));
   };
 
-  const activeMonth = months[monthIndex];
-  const { monthLabel } = buildMonthGrid(activeMonth, slots);
+  // computed once per months/slots identity instead of on every render for
+  // every page — buildMonthGrid does a full Map pass over `slots`, and
+  // re-running it 7x per render was the main source of jank while paging
+  const monthGrids = useMemo(() => months.map(m => buildMonthGrid(m, slots)), [months, slots]);
+  const { monthLabel } = monthGrids[monthIndex];
 
   return (
     <View style={s.container}>
@@ -95,7 +98,7 @@ export function ExpandedCalendar({ slots, selectedDate, onSelectDay }: Props) {
         contentOffset={{ x: initialIndex * SCREEN_WIDTH, y: 0 }}
       >
         {months.map((m, mi) => {
-          const { cells } = buildMonthGrid(m, slots);
+          const { cells } = monthGrids[mi];
           return (
             <View key={monthKey(m)} style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}>
               <View style={s.weekdayRow}>

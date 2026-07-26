@@ -20,6 +20,7 @@ export type MapEvent = {
   circleFriends: Friend[];
   isNew: boolean;
   category: Category;
+  isAttending: boolean;
 };
 
 export type CategoryStyle = {

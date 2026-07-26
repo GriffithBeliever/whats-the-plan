@@ -1,7 +1,8 @@
 // src/screens/MapScreen.tsx
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder, ScrollView,
+  NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, Map } from '@maplibre/maplibre-react-native';
@@ -9,7 +10,9 @@ import type {CameraRef} from '@maplibre/maplibre-react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { MapEvent, CATEGORY_STYLE, formatHour, formatDayLabel } from '../types/map';
 import { EventBubble } from '../components/EventBubble';
+import { ClusterMarker } from '../components/ClusterMarker';
 import { TimeScrubber, buildDaySlots, findTodayIndex } from '../components/TimeScrubber';
+import { useClusteredEvents } from '../utils/clusterEvents';
 
 function hoursFromNow(h: number): Date {
   const d = new Date();
@@ -22,6 +25,10 @@ function dateAt(year: number, month: number, day: number, hour: number): Date {
   return new Date(year, month, day, hour, 0, 0, 0);
 }
 
+// Fallback map focus when the user isn't attending any upcoming event — a
+// stand-in for real device geolocation, which this app doesn't integrate yet.
+const PLACEHOLDER_USER_LOCATION: [number, number] = [35.5018, 33.8938];
+
 // ── Dummy data (unchanged) ──
 const EVENTS: MapEvent[] = [
   {
@@ -32,36 +39,36 @@ const EVENTS: MapEvent[] = [
       { id: 'f1', initials: 'R', color: '#F0997B', textColor: '#4A1B0C' },
       { id: 'f2', initials: 'L', color: '#AFA9EC', textColor: '#26215C' },
     ],
-    isNew: false, category: 'nightlife',
+    isNew: false, category: 'nightlife', isAttending: true,
   },
   {
     id: '2', title: 'Old Town Food Crawl', location: 'Gemmayzeh',
     date: hoursFromNow(5), latitude: 33.8955, longitude: 35.5155,
-    goingCount: 12, circleFriends: [], isNew: false, category: 'food',
+    goingCount: 12, circleFriends: [], isNew: false, category: 'food', isAttending: false,
   },
   {
     id: '3', title: 'Beach Volley Night', location: 'Ramlet el Bayda',
     date: hoursFromNow(1), latitude: 33.8850, longitude: 35.4830,
-    goingCount: 21, circleFriends: [], isNew: true, category: 'outdoors',
+    goingCount: 21, circleFriends: [], isNew: true, category: 'outdoors', isAttending: true,
   },
   {
     id: '4', title: 'Morning Run Club', location: 'Corniche',
     date: hoursFromNow(27), latitude: 33.9020, longitude: 35.4900,
     goingCount: 8,
     circleFriends: [{ id: 'f3', initials: 'K', color: '#ED93B1', textColor: '#4B1528' }],
-    isNew: false, category: 'outdoors',
+    isNew: false, category: 'outdoors', isAttending: false,
   },
   {
     id: '5', title: 'August Beach Bonfire', location: 'Batroun',
     date: dateAt(2026, 7, 8, 20), latitude: 34.2553, longitude: 35.6581,
     goingCount: 27,
     circleFriends: [{ id: 'f4', initials: 'S', color: '#5DCAA5', textColor: '#04342C' }],
-    isNew: false, category: 'outdoors',
+    isNew: false, category: 'outdoors', isAttending: false,
   },
   {
     id: '6', title: 'Summer Jazz Night', location: 'Downtown',
     date: dateAt(2026, 7, 15, 21), latitude: 33.8969, longitude: 35.5131,
-    goingCount: 18, circleFriends: [], isNew: true, category: 'culture',
+    goingCount: 18, circleFriends: [], isNew: true, category: 'culture', isAttending: false,
   },
   {
     id: '7', title: 'Midsummer Food Market', location: 'Gemmayzeh',
@@ -71,9 +78,20 @@ const EVENTS: MapEvent[] = [
       { id: 'f5', initials: 'N', color: '#ED93B1', textColor: '#4B1528' },
       { id: 'f6', initials: 'T', color: '#F0997B', textColor: '#4A1B0C' },
     ],
-    isNew: false, category: 'food',
+    isNew: false, category: 'food', isAttending: false,
   },
 ];
+
+// Soonest event (from now) the user has confirmed attendance for, if any.
+const upcomingAttendingEvent = EVENTS
+  .filter(e => e.isAttending && e.date.getTime() >= Date.now())
+  .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
+
+const initialCamera = upcomingAttendingEvent
+  ? { center: [upcomingAttendingEvent.longitude, upcomingAttendingEvent.latitude] as [number, number], zoom: 15 }
+  : { center: PLACEHOLDER_USER_LOCATION, zoom: 12.5 };
+
+const ROW_HEIGHT = 56; // fixed so the list's scroll offset maps exactly to a row index
 
 // ── Compact list row for the day's events ──
 function DayEventRow({ event, onPress }: { event: MapEvent; onPress: () => void }) {
@@ -96,18 +114,35 @@ function DayEventRow({ event, onPress }: { event: MapEvent; onPress: () => void 
 
 export function MapScreen() {
   const slots = useMemo(() => buildDaySlots(EVENTS), []);
-  const [selectedIndex, setSelectedIndex] = useState(() => findTodayIndex(slots));
+  const [selectedIndex, setSelectedIndex] = useState(() => {
+    if (!upcomingAttendingEvent) return findTodayIndex(slots);
+    const idx = slots.findIndex(slot => slot.events.some(e => e.id === upcomingAttendingEvent.id));
+    return idx >= 0 ? idx : findTodayIndex(slots);
+  });
   const [selected, setSelected] = useState<MapEvent | null>(null);
   const sheetY = useRef(new Animated.Value(300)).current;
   const scrimOpacity = useRef(new Animated.Value(0)).current;
   const scrubberOpacity = useRef(new Animated.Value(1)).current;
   const lastBubbleTap = useRef(0);
   const cameraRef = useRef<CameraRef>(null);
+  const [zoom, setZoom] = useState(initialCamera.zoom); // matches Camera's initialViewState
+  const listScrollRef = useRef<ScrollView>(null);
+  const [listHeight, setListHeight] = useState(0);
+  const flownRowIndexRef = useRef(-1);
 
   const visible = slots[selectedIndex]?.events ?? [];
+  const { items: clusterItems, getExpansionZoom } = useClusteredEvents(visible, zoom);
 
   const flyTo = (event: MapEvent) => {
     cameraRef.current?.flyTo({center:[event.longitude, event.latitude], duration:600});
+  };
+
+  const flyToCluster = (center: [number, number], clusterId: number) => {
+    cameraRef.current?.flyTo({ center, zoom: getExpansionZoom(clusterId), duration: 600 });
+  };
+
+  const recenterToMe = () => {
+    cameraRef.current?.flyTo({ center: PLACEHOLDER_USER_LOCATION, zoom: 14, duration: 600 });
   };
 
   const openSheet = (event: MapEvent) => {
@@ -125,6 +160,25 @@ export function MapScreen() {
     flyTo(event);
     openSheet(event);
   };
+
+  // scrubbing the day event list: fly the camera to whichever event settles
+  // nearest the list's center, once per event (not on every scroll frame)
+  const handleListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (visible.length === 0 || listHeight === 0) return;
+    const y = e.nativeEvent.contentOffset.y;
+    const center = y + listHeight / 2 - ROW_HEIGHT / 2;
+    const idx = Math.max(0, Math.min(visible.length - 1, Math.round(center / ROW_HEIGHT)));
+    if (idx !== flownRowIndexRef.current) {
+      flownRowIndexRef.current = idx;
+      flyTo(visible[idx]);
+    }
+  };
+
+  // new day selected: reset the list to the top and let it re-sync on next scroll
+  useEffect(() => {
+    listScrollRef.current?.scrollTo({ y: 0, animated: false });
+    flownRowIndexRef.current = -1;
+  }, [selectedIndex]);
 
   const closeSheet = () => {
     Animated.parallel([
@@ -161,36 +215,59 @@ export function MapScreen() {
         style={StyleSheet.absoluteFill}
         mapStyle="https://tiles.openfreemap.org/styles/liberty"
         onPress={handleMapPress}
+        onRegionIsChanging={e => setZoom(e.nativeEvent.zoom)}
       >
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: [35.5018, 33.8938], zoomLevel: 12.5 }}
+          initialViewState={{ center: initialCamera.center, zoom: initialCamera.zoom }}
         />
-        {visible.map(event => (
-          <EventBubble
-            key={event.id}
-            event={event}
-            proximity={1}
-            onPress={() => openSheet(event)}
-            dimmed={!!selected && selected.id !== event.id}
-          />
-        ))}
+        {clusterItems.map(item =>
+          item.type === 'event' ? (
+            <EventBubble
+              key={item.event.id}
+              event={item.event}
+              proximity={1}
+              onPress={() => openSheet(item.event)}
+              dimmed={!!selected && selected.id !== item.event.id}
+            />
+          ) : (
+            <ClusterMarker
+              key={`cluster-${item.id}`}
+              center={item.center}
+              count={item.events.length}
+              onPress={() => {
+                lastBubbleTap.current = Date.now();
+                flyToCluster(item.center, item.id);
+              }}
+            />
+          ),
+        )}
       </Map>
 
       {/* Day event list — floats above the scrubber */}
       {visible.length > 0 && !selected && (
         <View style={s.listWrap} pointerEvents="box-none">
           <ScrollView
+            ref={listScrollRef}
             horizontal={false}
             style={s.listScroll}
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
+            onLayout={e => setListHeight(e.nativeEvent.layout.height)}
+            onScroll={handleListScroll}
+            scrollEventThrottle={16}
           >
             {visible.map(event => (
               <DayEventRow key={event.id} event={event} onPress={() => handleListPress(event)} />
             ))}
           </ScrollView>
         </View>
+      )}
+
+      {!upcomingAttendingEvent && !selected && (
+        <TouchableOpacity style={s.locateBtn} activeOpacity={0.8} onPress={recenterToMe}>
+          <MaterialIcons name="my-location" size={22} color="#B91C1C" />
+        </TouchableOpacity>
       )}
 
       <Animated.View
@@ -201,7 +278,7 @@ export function MapScreen() {
           <TimeScrubber
             slots={slots}
             selectedIndex={selectedIndex}
-            onChange={i => { setSelectedIndex(i); closeSheet(); }}
+            onChange={i => { setSelectedIndex(i); if (selected) closeSheet(); }}
           />
         </SafeAreaView>
       </Animated.View>
@@ -278,8 +355,8 @@ const s = StyleSheet.create({
   eventRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: ROW_HEIGHT,
     paddingHorizontal: 14,
-    paddingVertical: 10,
     gap: 10,
   },
   eventRowIcon: {
@@ -291,6 +368,23 @@ const s = StyleSheet.create({
   },
   eventRowTitle: { fontSize: 14, fontWeight: '700', color: '#111' },
   eventRowMeta: { fontSize: 11, color: '#94A3B8', marginTop: 1 },
+
+  locateBtn: {
+    position: 'absolute',
+    right: 16,
+    bottom: 140,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
+  },
 
   scrubberSafe: { position: 'absolute', bottom: 0, left: 0, right: 0 },
 
