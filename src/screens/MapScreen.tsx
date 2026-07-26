@@ -19,6 +19,10 @@ function hoursFromNow(h: number): Date {
   return d;
 }
 
+function dateAt(year: number, month: number, day: number, hour: number): Date {
+  return new Date(year, month, day, hour, 0, 0, 0);
+}
+
 // ── Dummy data ──
 const EVENTS: MapEvent[] = [
   {
@@ -72,6 +76,45 @@ const EVENTS: MapEvent[] = [
     isNew: false,
     category: 'outdoors',
   },
+  {
+      id: '5',
+      title: 'August Beach Bonfire',
+      location: 'Batroun',
+      date: dateAt(2026, 7, 8, 20), // month is 0-indexed: 7 = August
+      latitude: 34.2553,
+      longitude: 35.6581,
+      goingCount: 27,
+      circleFriends: [{ id: 'f4', initials: 'S', color: '#5DCAA5', textColor: '#04342C' }],
+      isNew: false,
+      category: 'outdoors',
+    },
+    {
+      id: '6',
+      title: 'Summer Jazz Night',
+      location: 'Downtown',
+      date: dateAt(2026, 7, 15, 21),
+      latitude: 33.8969,
+      longitude: 35.5131,
+      goingCount: 18,
+      circleFriends: [],
+      isNew: true,
+      category: 'culture',
+    },
+    {
+      id: '7',
+      title: 'Midsummer Food Market',
+      location: 'Gemmayzeh',
+      date: dateAt(2026, 7, 22, 17),
+      latitude: 33.8955,
+      longitude: 35.5155,
+      goingCount: 40,
+      circleFriends: [
+        { id: 'f5', initials: 'N', color: '#ED93B1', textColor: '#4B1528' },
+        { id: 'f6', initials: 'T', color: '#F0997B', textColor: '#4A1B0C' },
+      ],
+      isNew: false,
+      category: 'food',
+    },
 ];
 
 export function MapScreen() {
