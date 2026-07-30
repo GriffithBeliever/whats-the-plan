@@ -1,13 +1,16 @@
 // src/navigation/MainTabs.tsx
 import React from 'react';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import FontistoIcons from 'react-native-vector-icons/Fontisto';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PlansScreen } from '../screens/PlansScreen';
 import { GroupsStack } from './GroupsStack';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { MapScreen } from '../screens/MapScreen';
+import { LiveEventScreen } from '../screens/LiveEventScreen';
 
 export type MainTabsParamList = {
+  Live: undefined;
   Groups: undefined;
   Plans: undefined;
   Profile: undefined;
@@ -19,6 +22,13 @@ const Tab = createBottomTabNavigator<MainTabsParamList>();
 export function MainTabs() {
   return (
     <Tab.Navigator initialRouteName="Plans" screenOptions={{ headerShown: false }}>
+      <Tab.Screen name="Live" component={LiveEventScreen}
+      options={{
+          tabBarIcon: ({color, size}) => (
+            <FontistoIcons name="livestream"  color={color} size={size} />
+          ),
+        }}
+      />
       <Tab.Screen name="Groups" component={GroupsStack}
       options={{
           tabBarIcon: ({color, size}) => (
