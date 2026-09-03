@@ -5,6 +5,9 @@ import {
   Image, ImageBackground, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { PlansStackParamList } from '../navigator/PlansStack';
 
 // ── Dummy data ──
 type Plan = {
@@ -123,7 +126,9 @@ function CircleRow({ circle }: { circle: Circle }) {
 }
 
 // ── Screen ──
-export function PlansScreen() {
+type Props = NativeStackScreenProps<PlansStackParamList, 'PlansHome'>;
+
+export function PlansScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -153,12 +158,36 @@ export function PlansScreen() {
           <CircleRow key={circle.id} circle={circle} />
         ))}
       </ScrollView>
+
+      <TouchableOpacity
+        style={styles.fab}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate('CreateEvent')}
+      >
+        <MaterialIcons name="add" size={26} color="#fff" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#B91C1C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
   h1: {
     fontSize: 32, fontWeight: '800', color: '#111',
     paddingHorizontal: 20, paddingTop: 8,

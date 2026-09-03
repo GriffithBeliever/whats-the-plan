@@ -3,7 +3,7 @@ import React from 'react';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import FontistoIcons from 'react-native-vector-icons/Fontisto';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { PlansScreen } from '../screens/PlansScreen';
+import { PlansStack } from './PlansStack';
 import { GroupsStack } from './GroupsStack';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { MapScreen } from '../screens/MapScreen';
@@ -36,9 +36,9 @@ export function MainTabs() {
           ),
         }}
       />
-      <Tab.Screen 
-        name="Plans" 
-        component={PlansScreen} 
+      <Tab.Screen
+        name="Plans"
+        component={PlansStack}
         options={{
           tabBarIcon: ({color, size}) => (
             <MaterialIcons name="event-note"  color={color} size={size} />
