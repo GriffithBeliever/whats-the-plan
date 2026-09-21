@@ -17,6 +17,7 @@ import { DateDial } from '../components/DateDial';
 import { BottomSheet } from '../components/BottomSheet';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
+import { PlanCard } from '../components/PlanCard';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
 import { sameDay } from '../utils/date';
 
@@ -34,7 +35,7 @@ export function MapsScreen() {
   const myPlans = useMyPlans();
   const [scope, setScope] = useState<'mine' | 'all'>('all');
   const [selectedDate, setSelectedDate] = useState(startOfToday);
-  const [sheetPlan, setSheetPlan] = useState<Plan | null>(null);
+  const [sheetPlans, setSheetPlans] = useState<Plan[] | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   const basePool = scope === 'mine' ? myPlans : allPlans.filter(p => p.isPublic);
@@ -60,13 +61,42 @@ export function MapsScreen() {
     });
   }, [dayPlans, canvasSize]);
 
+  // "All" can pack far more pins into a day than "My Plans" ever will, and
+  // with everything auto-fit to the canvas, nearby plans can land close
+  // enough to overlap and become untappable. Group anything within a pixel
+  // radius of each other into one tappable "N plans here" bubble instead of
+  // leaving them stacked silently on top of each other.
+  const clusters = useMemo(() => {
+    const CLUSTER_RADIUS = 44;
+    const groups: { x: number; y: number; plans: Plan[] }[] = [];
+    const used = new Set<string>();
+    for (const marker of markers) {
+      if (used.has(marker.plan.id)) continue;
+      const group = [marker];
+      used.add(marker.plan.id);
+      for (const other of markers) {
+        if (used.has(other.plan.id)) continue;
+        const dx = other.x - marker.x;
+        const dy = other.y - marker.y;
+        if (Math.sqrt(dx * dx + dy * dy) < CLUSTER_RADIUS) {
+          group.push(other);
+          used.add(other.plan.id);
+        }
+      }
+      const cx = group.reduce((sum, g) => sum + g.x, 0) / group.length;
+      const cy = group.reduce((sum, g) => sum + g.y, 0) / group.length;
+      groups.push({ x: cx, y: cy, plans: group.map(g => g.plan) });
+    }
+    return groups;
+  }, [markers]);
+
   const onCanvasLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setCanvasSize({ width, height });
   };
 
   const openPlan = (planId: string) => {
-    setSheetPlan(null);
+    setSheetPlans(null);
     navigation.navigate('Plan', { planId });
   };
 
@@ -87,7 +117,7 @@ export function MapsScreen() {
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.todayBarContent}>
             {dayPlans.map(plan => (
-              <TouchableOpacity key={plan.id} style={styles.todayPill} onPress={() => setSheetPlan(plan)} activeOpacity={0.8}>
+              <TouchableOpacity key={plan.id} style={styles.todayPill} onPress={() => setSheetPlans([plan])} activeOpacity={0.8}>
                 <Text style={styles.todayIcon}>{plan.icon}</Text>
                 <View>
                   <Text style={styles.todayTitle} numberOfLines={1}>{plan.title}</Text>
@@ -101,16 +131,32 @@ export function MapsScreen() {
 
       <View style={styles.canvas} onLayout={onCanvasLayout}>
         <MapTexture />
-        {markers.map(({ plan, x, y }) => (
-          <TouchableOpacity
-            key={plan.id}
-            style={[styles.marker, { left: x - 18, top: y - 18, backgroundColor: plan.gradient[1] }]}
-            onPress={() => setSheetPlan(plan)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.markerIcon}>{plan.icon}</Text>
-          </TouchableOpacity>
-        ))}
+        {clusters.map(cluster => {
+          const key = cluster.plans.map(p => p.id).join('-');
+          if (cluster.plans.length === 1) {
+            const plan = cluster.plans[0];
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.marker, { left: cluster.x - 18, top: cluster.y - 18, backgroundColor: plan.gradient[1] }]}
+                onPress={() => setSheetPlans([plan])}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.markerIcon}>{plan.icon}</Text>
+              </TouchableOpacity>
+            );
+          }
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.clusterMarker, { left: cluster.x - 22, top: cluster.y - 22 }]}
+              onPress={() => setSheetPlans(cluster.plans)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.clusterCount}>{cluster.plans.length}</Text>
+            </TouchableOpacity>
+          );
+        })}
         {dayPlans.length === 0 ? (
           <View style={styles.canvasEmpty} pointerEvents="none">
             <EmptyState icon="🗺️" title="No plans on this day" subtitle="Try another date on the dial below." />
@@ -120,19 +166,29 @@ export function MapsScreen() {
 
       <DateDial onChange={setSelectedDate} />
 
-      <BottomSheet visible={!!sheetPlan} onClose={() => setSheetPlan(null)}>
-        {sheetPlan ? (
+      <BottomSheet
+        visible={!!sheetPlans}
+        onClose={() => setSheetPlans(null)}
+        title={sheetPlans && sheetPlans.length > 1 ? `${sheetPlans.length} plans here` : undefined}
+      >
+        {sheetPlans && sheetPlans.length === 1 ? (
           <View>
             <View style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetIcon}>{sheetPlan.icon}</Text>
+              <Text style={styles.sheetIcon}>{sheetPlans[0].icon}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.sheetTitle}>{sheetPlan.title}</Text>
-                <Text style={styles.sheetMeta}>{formatTime(sheetPlan.startTime)} · {sheetPlan.location}</Text>
+                <Text style={styles.sheetTitle}>{sheetPlans[0].title}</Text>
+                <Text style={styles.sheetMeta}>{formatTime(sheetPlans[0].startTime)} · {sheetPlans[0].location}</Text>
               </View>
             </View>
-            <Text style={styles.sheetDescription} numberOfLines={3}>{sheetPlan.description}</Text>
-            <Button label="Interested" onPress={() => openPlan(sheetPlan.id)} />
+            <Text style={styles.sheetDescription} numberOfLines={3}>{sheetPlans[0].description}</Text>
+            <Button label="Interested" onPress={() => openPlan(sheetPlans[0].id)} />
           </View>
+        ) : sheetPlans ? (
+          <ScrollView style={styles.sheetList} showsVerticalScrollIndicator={false}>
+            {sheetPlans.map(plan => (
+              <PlanCard key={plan.id} plan={plan} variant="row" onPress={() => openPlan(plan.id)} />
+            ))}
+          </ScrollView>
         ) : null}
       </BottomSheet>
     </SafeAreaView>
@@ -184,9 +240,15 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#fff', ...shadow.md,
   },
   markerIcon: { fontSize: 16 },
+  clusterMarker: {
+    position: 'absolute', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fff', backgroundColor: colors.primary, ...shadow.md,
+  },
+  clusterCount: { fontSize: font.size.md, fontWeight: font.weight.heavy, color: colors.onPrimary },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   sheetIcon: { fontSize: 32 },
   sheetTitle: { fontSize: font.size.lg, fontWeight: font.weight.bold, color: colors.text },
   sheetMeta: { fontSize: font.size.sm, color: colors.textMuted, marginTop: 2 },
   sheetDescription: { fontSize: font.size.sm, color: colors.textMuted, marginBottom: spacing.lg },
+  sheetList: { maxHeight: 420 },
 });
