@@ -4,8 +4,8 @@
 // textured canvas by their lat/long so the interaction model — markers, a
 // scrollable date dial, a today strip — is fully in place and easy to swap
 // for a real map SDK later.
-import React, { useMemo, useRef, useState } from 'react';
-import { FlatList, LayoutChangeEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { LayoutChangeEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,20 +13,19 @@ import { RootStackParamList } from '../navigator/RootStack';
 import { usePlans, useMyPlans } from '../state/AppStateContext';
 import { Plan, formatTime } from '../types/plan';
 import { SegmentedControl } from '../components/SegmentedControl';
+import { DateDial } from '../components/DateDial';
 import { BottomSheet } from '../components/BottomSheet';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
+import { sameDay } from '../utils/date';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const DAY_WIDTH = 60;
-const DAYS_BEFORE = 14;
-const DAYS_AFTER = 60;
-const TOTAL_DAYS = DAYS_BEFORE + DAYS_AFTER;
-
-function sameDay(a: Date, b: Date) {
-  return a.toDateString() === b.toDateString();
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 export function MapsScreen() {
@@ -34,22 +33,9 @@ export function MapsScreen() {
   const allPlans = usePlans();
   const myPlans = useMyPlans();
   const [scope, setScope] = useState<'mine' | 'all'>('all');
-  const [selectedIndex, setSelectedIndex] = useState(DAYS_BEFORE);
+  const [selectedDate, setSelectedDate] = useState(startOfToday);
   const [sheetPlan, setSheetPlan] = useState<Plan | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const dialRef = useRef<FlatList<Date>>(null);
-
-  const dates = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return Array.from({ length: TOTAL_DAYS }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + (i - DAYS_BEFORE));
-      return d;
-    });
-  }, []);
-
-  const selectedDate = dates[selectedIndex];
 
   const basePool = scope === 'mine' ? myPlans : allPlans.filter(p => p.isPublic);
 
@@ -73,11 +59,6 @@ export function MapsScreen() {
       return { plan, x: pad + nx * w, y: pad + (1 - ny) * h };
     });
   }, [dayPlans, canvasSize]);
-
-  const selectIndex = (index: number) => {
-    setSelectedIndex(index);
-    dialRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-  };
 
   const onCanvasLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -137,34 +118,7 @@ export function MapsScreen() {
         ) : null}
       </View>
 
-      <FlatList
-        ref={dialRef}
-        style={styles.dialList}
-        data={dates}
-        horizontal
-        keyExtractor={(_, i) => String(i)}
-        showsHorizontalScrollIndicator={false}
-        getItemLayout={(_, index) => ({ length: DAY_WIDTH, offset: DAY_WIDTH * index, index })}
-        initialScrollIndex={DAYS_BEFORE}
-        snapToInterval={DAY_WIDTH}
-        decelerationRate="fast"
-        contentContainerStyle={styles.dial}
-        onMomentumScrollEnd={e => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / DAY_WIDTH);
-          setSelectedIndex(Math.max(0, Math.min(TOTAL_DAYS - 1, idx)));
-        }}
-        renderItem={({ item, index }) => {
-          const active = index === selectedIndex;
-          const isToday = sameDay(item, new Date());
-          return (
-            <TouchableOpacity style={[styles.dayCell, active && styles.dayCellActive]} onPress={() => selectIndex(index)}>
-              <Text style={[styles.dayWeekday, active && styles.dayTextActive]}>{item.toLocaleDateString(undefined, { weekday: 'short' })}</Text>
-              <Text style={[styles.dayNumber, active && styles.dayTextActive]}>{item.getDate()}</Text>
-              {isToday ? <View style={[styles.todayDot, active && styles.todayDotActive]} /> : null}
-            </TouchableOpacity>
-          );
-        }}
-      />
+      <DateDial onChange={setSelectedDate} />
 
       <BottomSheet visible={!!sheetPlan} onClose={() => setSheetPlan(null)}>
         {sheetPlan ? (
@@ -230,15 +184,6 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#fff', ...shadow.md,
   },
   markerIcon: { fontSize: 16 },
-  dialList: { flexGrow: 0, flexShrink: 0, height: 96 },
-  dial: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, alignItems: 'center' },
-  dayCell: { width: DAY_WIDTH - 8, marginRight: 8, paddingVertical: 10, borderRadius: radius.md, alignItems: 'center', backgroundColor: colors.surface },
-  dayCellActive: { backgroundColor: colors.primary },
-  dayWeekday: { fontSize: 10, color: colors.textMuted, fontWeight: font.weight.semibold },
-  dayNumber: { fontSize: font.size.md, color: colors.text, fontWeight: font.weight.bold, marginTop: 2 },
-  dayTextActive: { color: colors.onPrimary },
-  todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary, marginTop: 4 },
-  todayDotActive: { backgroundColor: '#fff' },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   sheetIcon: { fontSize: 32 },
   sheetTitle: { fontSize: font.size.lg, fontWeight: font.weight.bold, color: colors.text },
