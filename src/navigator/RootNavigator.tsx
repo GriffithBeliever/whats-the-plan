@@ -1,9 +1,10 @@
-// src/navigation/RootNavigator.tsx
+// src/navigator/RootNavigator.tsx
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { AuthStack } from './AuthStack';
-import { MainTabs } from './MainTabs';
+import { RootStack } from './RootStack';
+import { colors } from '../theme/theme';
 
 export function RootNavigator() {
   const { userToken, isLoading } = useAuth();
@@ -11,14 +12,14 @@ export function RootNavigator() {
   if (isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  return userToken ? <MainTabs /> : <AuthStack />;
+  return userToken ? <RootStack /> : <AuthStack />;
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
 });

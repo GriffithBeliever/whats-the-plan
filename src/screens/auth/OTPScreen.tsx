@@ -3,7 +3,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/AuthStack';
+import { AuthStackParamList } from '../../navigator/AuthStack';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/Button';
 
@@ -28,22 +28,17 @@ export function OTPScreen({ route }: Props) {
     const code = digits.join('');
     if (code.length < LEN) { setError('Enter all 6 digits'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise<void>(resolve => setTimeout(resolve, 600));
     setLoading(false);
-    // STUBBED: 123456 is "correct"
-    if (code === '123456') {
-      await signIn('fake-token-123');   // ← into the app
-    } else {
-      setError('Incorrect code (try 123456)');
-      setDigits(Array(LEN).fill('')); refs.current[0]?.focus();
-    }
+    // STUBBED: any 6-digit code is accepted, this app has no real OTP backend yet
+    await signIn('fake-token-123');   // ← into the app
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <Text style={styles.title}>Verify your number</Text>
-        <Text style={styles.subtitle}>Code sent to {phone}</Text>
+        <Text style={styles.subtitle}>Code sent to {phone} · any 6 digits work for testing</Text>
         <View style={styles.row}>
           {digits.map((d, i) => (
             <TextInput key={i} ref={r => { refs.current[i] = r; }}
