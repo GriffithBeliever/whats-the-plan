@@ -2,10 +2,14 @@
 import React, { useState } from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigator/RootStack';
-import { colors, font, radius, spacing } from '../theme/theme';
+import { colors, font, radius, shadow, spacing } from '../theme/theme';
+
+const OUTING_GRADIENT: [string, string] = ['#22D3EE', colors.outing];
+const EVENT_GRADIENT: [string, string] = ['#F9A8D4', colors.event];
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,15 +42,27 @@ export function CreatePlanScreen() {
       <Text style={styles.prompt}>What are you planning?</Text>
 
       <View style={styles.choiceRow}>
-        <TouchableOpacity style={[styles.choice, styles.outingChoice]} activeOpacity={0.85} onPress={() => go('CreateOuting')}>
-          <Text style={styles.choiceIcon}>🧑‍🤝‍🧑</Text>
-          <Text style={styles.choiceTitle}>Outing</Text>
-          <Text style={styles.choiceSubtitle}>Small friend group{'\n'}(up to 15)</Text>
+        <TouchableOpacity style={styles.choice} activeOpacity={0.9} onPress={() => go('CreateOuting')}>
+          <LinearGradient colors={OUTING_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.choiceGradient}>
+            <View style={styles.choiceIconWrap}>
+              <Text style={styles.choiceIcon}>🧑‍🤝‍🧑</Text>
+            </View>
+            <View style={styles.choiceTextBlock}>
+              <Text style={styles.choiceTitle}>Outing</Text>
+              <Text style={styles.choiceSubtitle}>Small friend group{'\n'}up to 15 people</Text>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.choice, styles.eventChoice]} activeOpacity={0.85} onPress={() => go('CreateEvent')}>
-          <Text style={styles.choiceIcon}>🎫</Text>
-          <Text style={styles.choiceTitle}>Event</Text>
-          <Text style={styles.choiceSubtitle}>Open to anyone{'\n'}(unlimited)</Text>
+        <TouchableOpacity style={styles.choice} activeOpacity={0.9} onPress={() => go('CreateEvent')}>
+          <LinearGradient colors={EVENT_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.choiceGradient}>
+            <View style={styles.choiceIconWrap}>
+              <Text style={styles.choiceIcon}>🎫</Text>
+            </View>
+            <View style={styles.choiceTextBlock}>
+              <Text style={styles.choiceTitle}>Event</Text>
+              <Text style={styles.choiceSubtitle}>Open to anyone{'\n'}unlimited</Text>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -61,10 +77,11 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontSize: font.size.xs, color: colors.textMuted, marginTop: 2 },
   prompt: { fontSize: font.size.md, fontWeight: font.weight.semibold, color: colors.text, marginBottom: spacing.md },
   choiceRow: { flex: 1, flexDirection: 'row', gap: spacing.md },
-  choice: { flex: 1, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  outingChoice: { backgroundColor: colors.outingLight },
-  eventChoice: { backgroundColor: colors.eventLight },
-  choiceIcon: { fontSize: 40 },
-  choiceTitle: { fontSize: font.size.xl, fontWeight: font.weight.heavy, color: colors.text },
-  choiceSubtitle: { fontSize: font.size.xs, color: colors.textMuted, textAlign: 'center' },
+  choice: { flex: 1, borderRadius: radius.xl, overflow: 'hidden', ...shadow.lg },
+  choiceGradient: { flex: 1, alignItems: 'center', padding: spacing.xl },
+  choiceIconWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  choiceIcon: { fontSize: 72 },
+  choiceTextBlock: { alignItems: 'center', gap: 4 },
+  choiceTitle: { fontSize: font.size.xxl, fontWeight: font.weight.heavy, color: '#fff' },
+  choiceSubtitle: { fontSize: font.size.sm, fontWeight: font.weight.medium, color: 'rgba(255,255,255,0.88)', textAlign: 'center' },
 });
