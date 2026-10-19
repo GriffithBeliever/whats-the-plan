@@ -6,12 +6,14 @@ import React, { useState } from 'react';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../navigator/RootStack';
 import { NewPlanInput, useCreatePlan } from '../state/AppStateContext';
-import { PlanCard, PlanKind, clampOutingCapacity, formatDayLabel, formatTime } from '../types/plan';
+import { PlanCard, PlanKind, clampOutingCapacity } from '../types/plan';
 import { colors, font, gradients, icons, radius, spacing } from '../theme/theme';
 import { Input } from './Input';
 import { Button } from './Button';
+import { Chip } from './Chip';
 import { Stepper } from './Stepper';
 import { SegmentedControl } from './SegmentedControl';
 import { GradientPicker } from './GradientPicker';
@@ -19,7 +21,26 @@ import { EmojiPicker } from './EmojiPicker';
 import { AmenitiesEditor } from './AmenitiesEditor';
 import { CardsEditor } from './CardsEditor';
 import { SectionHeader } from './SectionHeader';
+import { PlanPreviewHeader } from './PlanPreviewHeader';
+import { LocationPicker } from './LocationPicker';
+import { DEFAULT_CENTER } from './MapCanvas';
 import { notImplemented } from '../utils/alerts';
+
+type QuickOption = { label: string; dayOffset: number; hour: number };
+
+function daysUntilNextSaturday(): number {
+  const day = new Date().getDay(); // 0=Sun..6=Sat
+  return (6 - day + 7) % 7;
+}
+
+function quickOptions(): QuickOption[] {
+  return [
+    { label: 'Tonight', dayOffset: 0, hour: 19 },
+    { label: 'Tomorrow', dayOffset: 1, hour: 18 },
+    { label: 'This Weekend', dayOffset: daysUntilNextSaturday(), hour: 18 },
+    { label: 'Next Week', dayOffset: 7, hour: 18 },
+  ];
+}
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -47,6 +68,9 @@ export function PlanForm({ kind, isPublic, hasGroupChat }: Props) {
   const [ticketPrice, setTicketPrice] = useState('10');
   const [amenities, setAmenities] = useState<string[]>([]);
   const [cards, setCards] = useState<PlanCard[]>([]);
+  const [latitude, setLatitude] = useState(DEFAULT_CENTER[1]);
+  const [longitude, setLongitude] = useState(DEFAULT_CENTER[0]);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const startTime = React.useMemo(() => {
     const d = new Date();
@@ -55,15 +79,28 @@ export function PlanForm({ kind, isPublic, hasGroupChat }: Props) {
     return d;
   }, [dayOffset, hour, minute]);
 
-  const canSubmit = title.trim().length > 0 && location.trim().length > 0;
+  const titleValid = title.trim().length > 0;
+  const locationValid = location.trim().length > 0;
+  const canSubmit = titleValid && locationValid;
+
+  const applyQuickOption = (option: QuickOption) => {
+    setDayOffset(option.dayOffset);
+    setHour(option.hour);
+    setMinute('00');
+  };
 
   const submit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      setSubmitAttempted(true);
+      return;
+    }
     const input: NewPlanInput = {
       kind,
       title: title.trim(),
       description: description.trim() || `Join us for ${title.trim()} at ${location.trim()}.`,
       location: location.trim(),
+      latitude,
+      longitude,
       startTime: startTime.toISOString(),
       gradient,
       icon,
@@ -86,14 +123,50 @@ export function PlanForm({ kind, isPublic, hasGroupChat }: Props) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Input label="Title" value={title} onChangeText={setTitle} placeholder={kind === 'outing' ? 'Beach Bonfire' : 'Summer Music Festival'} />
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <PlanPreviewHeader kind={kind} gradient={gradient} icon={icon} title={title} location={location} startTime={startTime} />
+
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Input
+        label="Title"
+        value={title}
+        onChangeText={setTitle}
+        placeholder={kind === 'outing' ? 'Beach Bonfire' : 'Summer Music Festival'}
+        required
+        error={submitAttempted && !titleValid ? 'Title is required' : undefined}
+      />
       <Input label="Description" value={description} onChangeText={setDescription} placeholder="What's the plan?" multiline />
-      <Input label="Location" value={location} onChangeText={setLocation} placeholder="Where's it happening?" />
+      <Input
+        label="Location"
+        value={location}
+        onChangeText={setLocation}
+        placeholder="Where's it happening?"
+        required
+        error={submitAttempted && !locationValid ? 'Location is required' : undefined}
+      />
+      <View style={styles.mapField}>
+        <LocationPicker
+          latitude={latitude}
+          longitude={longitude}
+          gradient={gradient}
+          icon={icon}
+          onChange={(lat, lng) => { setLatitude(lat); setLongitude(lng); }}
+        />
+      </View>
 
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>When</Text>
-        <Text style={styles.whenPreview}>{formatDayLabel(startTime.toISOString())} · {formatTime(startTime.toISOString())}</Text>
+        <View style={styles.chipRow}>
+          {quickOptions().map(option => (
+            <Chip
+              key={option.label}
+              label={option.label}
+              selected={dayOffset === option.dayOffset && hour === option.hour}
+              onPress={() => applyQuickOption(option)}
+            />
+          ))}
+        </View>
+        <Text style={styles.whenManualLabel}>Or set it manually</Text>
         <View style={styles.whenRow}>
           <View style={styles.whenControl}>
             <Text style={styles.whenControlLabel}>Days from now</Text>
@@ -174,23 +247,27 @@ export function PlanForm({ kind, isPublic, hasGroupChat }: Props) {
         <View style={{ height: spacing.sm }} />
         <CardsEditor cards={cards} onChange={setCards} isPaid={isPaid} />
       </View>
+      </ScrollView>
 
-      <Button
-        label={kind === 'outing' ? '📣 Broadcast Outing' : '📣 Publish Event'}
-        onPress={submit}
-        disabled={!canSubmit}
-        style={styles.submit}
-      />
-    </ScrollView>
+      <View style={styles.footer}>
+        <Button
+          label={kind === 'outing' ? '📣 Broadcast Outing' : '📣 Publish Event'}
+          onPress={submit}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.xl, paddingTop: 0, paddingBottom: spacing.xxxl },
+  mapField: { marginBottom: spacing.lg },
   field: { marginBottom: spacing.lg },
   fieldLabel: { fontSize: font.size.sm, fontWeight: font.weight.semibold, color: colors.text, marginBottom: spacing.sm },
   fieldHint: { fontSize: font.size.xs, color: colors.textMuted, marginTop: 2 },
-  whenPreview: { fontSize: font.size.base, fontWeight: font.weight.bold, color: colors.primary, marginBottom: spacing.md },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  whenManualLabel: { fontSize: font.size.xs, color: colors.textMuted, marginBottom: spacing.sm },
   whenRow: { flexDirection: 'row', gap: spacing.xl, marginBottom: spacing.md },
   whenControl: { gap: spacing.xs },
   whenControlLabel: { fontSize: font.size.xs, color: colors.textMuted },
@@ -207,5 +284,7 @@ const styles = StyleSheet.create({
   paymentIcon: { fontSize: 22 },
   paymentChange: { color: colors.primary, fontWeight: font.weight.semibold, fontSize: font.size.sm },
   section: { marginTop: spacing.md, marginBottom: spacing.lg },
-  submit: { marginTop: spacing.lg },
+  footer: {
+    padding: spacing.xl, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border,
+  },
 });

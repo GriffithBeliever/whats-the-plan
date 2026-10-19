@@ -24,18 +24,24 @@ type Props = {
   error?: string;
   helper?: string;
   maxLength?: number;
+  required?: boolean;
 };
 
 export function Input({
   label, value, onChangeText, placeholder, secureTextEntry, secureToggle,
-  keyboardType, autoCapitalize = 'sentences', multiline, error, helper, maxLength,
+  keyboardType, autoCapitalize = 'sentences', multiline, error, helper, maxLength, required,
 }: Props) {
   const [hidden, setHidden] = useState(!!secureTextEntry);
   const [focused, setFocused] = useState(false);
 
   return (
     <View style={styles.wrap}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={styles.label}>
+          {label}
+          {required ? <Text style={styles.required}> *</Text> : null}
+        </Text>
+      ) : null}
       <View style={[styles.field, focused && styles.fieldFocused, !!error && styles.fieldError, multiline && styles.fieldMultiline]}>
         <TextInput
           value={value}
@@ -65,6 +71,7 @@ export function Input({
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.lg },
   label: { fontSize: font.size.sm, fontWeight: font.weight.semibold, color: colors.textMuted, marginBottom: spacing.xs },
+  required: { color: colors.danger },
   field: {
     flexDirection: 'row',
     alignItems: 'center',

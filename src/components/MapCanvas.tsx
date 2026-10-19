@@ -15,10 +15,13 @@ import { Plan } from '../types/plan';
 import { EmptyState } from './EmptyState';
 import { colors, radius, shadow, spacing } from '../theme/theme';
 
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+// Exported so other embedded maps (e.g. the location picker in the create-plan
+// form) use the same free tile source and fallback center instead of
+// duplicating them.
+export const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 // Falls back to roughly where the seed data is centered, so the map still
 // looks intentional (not "null island") on a day with zero plans.
-const DEFAULT_CENTER: LngLat = [-73.99, 40.73];
+export const DEFAULT_CENTER: LngLat = [-73.99, 40.73];
 const DEFAULT_ZOOM = 11;
 const CAMERA_PADDING = { left: 48, right: 48, top: 48, bottom: 48 };
 // Minimum bounds size in degrees (~650m) so a single plan — or several at the

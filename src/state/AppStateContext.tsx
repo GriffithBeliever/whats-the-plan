@@ -23,6 +23,8 @@ export type NewPlanInput = {
   title: string;
   description: string;
   location: string;
+  latitude: number;
+  longitude: number;
   startTime: string;
   gradient: [string, string];
   icon: string;
@@ -73,8 +75,6 @@ function reducer(state: State, action: Action): State {
       const newPlan: Plan = {
         id,
         ...input,
-        latitude: 40.73 + (Math.random() - 0.5) * 0.12,
-        longitude: -73.99 + (Math.random() - 0.5) * 0.12,
         organizerId: state.currentUser.id,
         participantIds: [state.currentUser.id],
         createdAt: new Date().toISOString(),
